@@ -1,28 +1,24 @@
-# Junior Full-Stack Developer - Take-Home Technical Assessment
-
-> **Submission by:** Candidate  
-> **Position:** Junior Full-Stack Developer  
-> **Date:** October 2026  
-
----
 
 ## Section A: Theory and Architecture
+
+
+<img width="1264" height="216" alt="image" src="https://github.com/user-attachments/assets/b6557889-e4ad-44df-9ee9-a40fb00d1a46" />
 
 ### Question 1: Next.js Architecture
 
 #### 1. Difference between Server Component and Client Component (`'use client'`)
 
-> **ELI5 (Explain Like I'm 5):**
-> Think of a restaurant:
-> * **Server Component** is like the **Kitchen**. All the heavy cooking, hot stoves, and raw ingredients stay hidden in the back. Customers only receive the freshly cooked dish on their table (pre-rendered HTML).
-> * **Client Component (`'use client'`)** is like the **Dining Table and the Bell**. It’s where customers can directly interact—ring the bell, press buttons, or customize condiments on the spot.
+**Server Component**
+- runs only on the server side. it's never send javascript to the browser (users cant know), like logical/flow of the system.
+- programmer fetching data, query db, logic, cant be exposed.
 
-* **Server Component (Default):** Runs and renders **only on the server**. It never sends JavaScript to the browser, making the page load faster and keeping the bundle size small.
-* **Client Component:** Opted in by writing `'use client'` at the top of the file. Its JavaScript is downloaded and executed inside the user's browser, enabling interactive features.
+**Client Component ('use client')** 
+- it's javascript is downloaded and executed inside the user's browser.
+- andles UI interactions, user clicks, and client-side data (useState/useQuery)
 
 #### 2. When would you use each one?
 
-* **Use Server Components for:**
+**Use Server Components for:**
   * Fetching data directly from databases or backend APIs.
   * Static content, layouts, text, headers, and footers.
   * Keeping heavy npm dependencies on the server to keep user download speeds fast.
