@@ -138,23 +138,25 @@ export async function POST(req: Request) {
 ### Identified Issues:
 
 **1. SQL Injection (Security Problem)**
-- **What could go wrong:** Values `${newStatus}` and `${invoiceId}` are injected directly into the SQL string.
--anyone can pass malicious SQL (like `' OR '1'='1` or `; DROP TABLE invoices; --`) and compromise, steal, or delete the entire database.
-- **How to fix:** use parameterized queries / prepared statements (e.g. `$1, $2`) so the database engine treats input strictly as data, never as executable code.
+- **What could go wrong:** Values `${newStatus}` and `${invoiceId}` are injected directly into the SQL string. Anyone can pass malicious SQL (like `' OR '1'='1` or `; DROP TABLE invoices; --`) and steal, compromise, or delete the entire database.
+- **How to fix:** Use parameterized queries / prepared statements (e.g. `$1, $2`) so the database engine treats input strictly as data, never as executable code.
+- - return `error: error.message` directly in 500 response leaks internal database details to users. we should log the error on the server (`console.error`) and return a generic message like `"Internal server error"`.
 
-**2. Illegal State Transitions (Logic & Business)**
-- **What could go wrong:** An invoice is a state machine, but this code blindly accepts any `newStatus`. For example, an invoice that is already `PAID` or `CANCELLED` could be illegally changed back to `DRAFT`.
-- **How to fix:** Validate allowed transitions in business logic
-  example
-  - `DRAFT` can go to `PENDING`, 
-  - `PENDING` can go to `PAID`, 
-  - *but `PAID` cannot go back to `DRAFT`*
+**2. No Input Validation & Illegal State Transitions (Data & Logic Problem)**
+- **What could go wrong:** The code blindly accepts any string for `newStatus` (even random junk like `"SUPERMAN"` or empty strings) without checking if `invoiceId` is a valid number. Furthermore, an invoice is a state machine, but this code allows illegal status changes — for example, an invoice that is already `PAID` or `CANCELLED` could be changed back to `DRAFT`.
+- **How to fix:** 
+  - Validate inputs using **Zod** to allow only valid statuses (`['DRAFT', 'PENDING', 'PAID', 'CANCELLED']`) and ensure `invoiceId` is a number.
+  - Enforce business logic rules for state transitions:
+    - `DRAFT` can go to `PENDING`
+    - `PENDING` can go to `PAID`
+    - *but `PAID` cannot go back to `DRAFT`*
 
-**3. Missing Authentication & Authorization (Architecture & Data )**
-- **What could go wrong:** The code takes `userId` from the body but never checks if the caller is actually logged in, nor does it verify if that user owns the invoice.
-- normal user can call this API and mark any invoice as `PAID` for free and easily
-- **How to fix:** Get user identity from server session/token (never trust client body), check ownership in database (`WHERE id = $1 AND customer_id = $2`)
-- and ensure only admins or payment webhooks can mark an invoice as `PAID`.
+**3. Missing Authentication & Authorization (Security & Access Control)**
+- **What could go wrong:** The code takes `userId` from the request body but never verifies if the user is actually logged in, nor does it check if that user owns the invoice. Any normal user can call this API and mark someone else's invoice as `PAID` for free.
+- **How to fix:** 
+  - Get user identity from a secure server-side session/token (never trust client body).
+  - Check invoice ownership in the database (`WHERE id = $1 AND customer_id = $2`).
+  - Restrict status changes so that only payment webhooks or authorized admins can set an invoice to `PAID`.
 
 ---
 
@@ -169,7 +171,7 @@ import { getAuthUser } from "@/lib/auth"; // verify session
 
 // 1. Schema validation
 const updateSchema = z.object({
-  invoiceId: z.coerce.number().int().positive(),
+  invoiceId: z.coerce.number().int().positive({ message: "Invalid invoice ID" }),
   newStatus: z.enum(["DRAFT", "PENDING", "PAID", "CANCELLED"]),
 });
 
@@ -183,33 +185,45 @@ const ALLOWED_TRANSITIONS: Record<string, string[]> = {
 
 export async function POST(req: Request) {
   try {
-    // Check if user is logged in
+    // 1. Check if user is logged in
     const user = await getAuthUser(req);
     if (!user) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    // 2. Validate request body
     const body = await req.json().catch(() => null);
     const parsed = updateSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ success: false, error: parsed.error.flatten().fieldErrors }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
     }
 
     const { invoiceId, newStatus } = parsed.data;
 
-    // Fetch existing invoice to check ownership and state transition
+    // 3. Fetch existing invoice to check ownership and current status
     const existing = await db.query(
       `SELECT id, status, customer_id FROM invoices WHERE id = $1 AND customer_id = $2`,
       [invoiceId, user.id]
     );
 
     if (existing.rowCount === 0) {
-      return NextResponse.json({ success: false, error: "Invoice not found or forbidden" }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: "Invoice not found or forbidden" },
+        { status: 404 }
+      );
     }
 
     const currentStatus = existing.rows[0].status;
 
-    // Check illegal state transition
+    // If status is already the same, just return early
+    if (currentStatus === newStatus) {
+      return NextResponse.json({ success: true, data: existing.rows[0] });
+    }
+
+    // 4. Check for illegal state transition
     const allowed = ALLOWED_TRANSITIONS[currentStatus] || [];
     if (!allowed.includes(newStatus)) {
       return NextResponse.json(
@@ -218,19 +232,23 @@ export async function POST(req: Request) {
       );
     }
 
-    // Parameterized query to prevent SQL Injection
+    // 5. Parameterized query to prevent SQL Injection
     const updated = await db.query(
       `UPDATE invoices 
        SET status = $1, updated_at = NOW() 
-       WHERE id = $2 
+       WHERE id = $2 AND customer_id = $3
        RETURNING *`,
-      [newStatus, invoiceId]
+      [newStatus, invoiceId, user.id]
     );
 
     return NextResponse.json({ success: true, data: updated.rows[0] });
 
   } catch (error) {
+    // 6. Safe error logging - do not leak error.message to client
     console.error("Invoice update error:", error);
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
