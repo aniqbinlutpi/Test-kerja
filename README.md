@@ -136,12 +136,17 @@ export async function POST(req: Request) {
 
 ### Identified Issues:
 
-| # | Issue Category | Problem & What Could Go Wrong | How to Fix It |
-|---|---|---|---|
-| **1** | **Security (Critical)** | **SQL Injection Vulnerability**<br>Values (`${newStatus}` and `${invoiceId}`) are concatenated directly into the raw SQL string. An attacker can inject arbitrary SQL commands (e.g., `' OR '1'='1` or `; DROP TABLE invoices; --`) to bypass checks or wipe the database. | Use **Parameterized Queries / Prepared Statements** (e.g., `$1, $2`) so the database engine treats input strictly as data, never as executable code. |
-| **2** | **Security & Logic** | **Missing Authentication & Authorization (IDOR / Broken Access Control)**<br>The route trusts `userId` from the request body without verifying user session credentials, and doesn't even verify if that user owns the invoice. Anyone can change any customer's invoice status to `PAID`. | Authenticate the user from a secure server-side session/token. Ensure the update query checks ownership (e.g., `WHERE id = $1 AND customer_id = $2`) or requires admin privileges. |
-| **3** | **Data Integrity** | **Lack of Input Validation**<br>No validation on `newStatus` or `invoiceId`. A user could supply an invalid status (e.g., `"BANANA"` or an empty string) or invalid data types (`invoiceId = "abc"`), causing database errors or corrupting state. | Validate inputs against an allowed whitelist/enum (e.g., `['DRAFT', 'PENDING', 'PAID', 'CANCELLED']`) and verify that `invoiceId` is a positive integer using a validator like **Zod**. |
-| **4** | **Security / Ops** | **Information Disclosure in Error Handling**<br>Returning `error.message` directly in HTTP 500 responses exposes internal database schemas and server stack traces to clients. | Log the detailed error internally (`console.error`) and return a generic, safe error message to the client. |
+**1. SQL Injection Vulnerability (Security Problem)**
+- **What could go wrong:** Values `${newStatus}` and `${invoiceId}` are injected directly into the SQL string. Anyone can pass malicious SQL (like `' OR '1'='1` or `; DROP TABLE invoices; --`) and compromise, steal, or delete the entire database.
+- **How to fix:** Use parameterized queries / prepared statements (e.g. `$1, $2`) so the database engine treats input strictly as data, never as executable code.
+
+**2. Illegal State Transitions (Logic & Business Problem)**
+- **What could go wrong:** An invoice is a state machine, but this code blindly accepts any `newStatus`. For example, an invoice that is already `PAID` or `CANCELLED` could be illegally changed back to `DRAFT`.
+- **How to fix:** Validate allowed transitions in business logic (e.g., `DRAFT` can go to `PENDING`, `PENDING` can go to `PAID`, but `PAID` cannot go back to `DRAFT`).
+
+**3. Missing Authentication & Authorization (Architecture & Data Problem)**
+- **What could go wrong:** The code takes `userId` from the body but never checks if the caller is actually logged in, nor does it verify if that user owns the invoice. A normal user can call this API and mark any invoice as `PAID` for free!
+- **How to fix:** Get user identity from server session/token (never trust client body), check ownership in database (`WHERE id = $1 AND customer_id = $2`), and ensure only admins or payment webhooks can mark an invoice as `PAID`.
 
 ---
 
