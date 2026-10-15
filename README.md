@@ -6,6 +6,8 @@
 
 ### Question 1: Next.js Architecture
 
+<img width="1270" height="82" alt="image" src="https://github.com/user-attachments/assets/f26bbf60-6429-4dcb-8b7d-d91a15b8d8ca" />
+
 **Server Component**
 - runs only on the server side. it's never send javascript to the browser (users cant know), like logical/flow of the system.
 - programmer fetching data, query db, logic, cant be exposed.
@@ -14,7 +16,7 @@
 - it's javascript is downloaded and executed inside the user's browser.
 - andles UI interactions, user clicks, and client-side data (useState/useQuery)
 
-<img width="1352" height="238" alt="image" src="https://github.com/user-attachments/assets/e268a129-8bac-47be-a293-d55736095569" />
+<img width="418" height="60" alt="image" src="https://github.com/user-attachments/assets/733737e5-26ba-428f-ae9a-a9006ea99f8d" />
 
 **Use Server Components**
 - fetching data directly from database or backend API (no need create extra API routes).
@@ -27,16 +29,12 @@
 - browser-only features (accessing localStorage, window screen size, cookies).
 - popup modals, dropdown menu or anything that users open and close on the screen.
 
-#### 3. Why should you NEVER import database queries or secret API keys into a Client Component?
+<img width="1092" height="72" alt="image" src="https://github.com/user-attachments/assets/1e680b34-22b5-4e05-8f78-faa3f4a99524" />
 
-> **ELI5:**
-> You would never leave your house key or bank PIN written on a sticker placed on the customer's dining table!
-
-* Anything imported into a Client Component gets bundled into JavaScript files that are downloaded directly onto the visitor’s browser.
-* Any user can open **Browser DevTools** (`Right Click -> Inspect -> Network / Sources`) and easily see your database passwords, Stripe secret keys, or internal queries.
-* Attackers can take those credentials and read, alter, or delete your entire production database.
-
----
+- Client component will download all its javascript code straight into user's browser.
+- any user can just press F12 or open Inspect Element/Console (in network tabs) and easily see your secret keys (like Stripe keys, OpenAI API key or database password).
+- if hackers find these secrets, they can easily steal user data or drop/delete your whole database.
+That's why anything secret and database queries must always stay on server side / backend only.
 
 ### Question 2: Database Design
 
