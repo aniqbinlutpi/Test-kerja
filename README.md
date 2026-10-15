@@ -75,7 +75,6 @@ CREATE TABLE invoices (
 - if invoices get deleted, company will have accounting and tax audit issues because we lose the proof.
 - with RESTRICT, the database will block anyone from deleting the customer if they still have invoice history.
 - if we really need to delete or disable the customer, it's better to use soft delete 
-- example: set is_active = false or deleted_at = now()) so the invoice history stays safe.
 
 ---
 
