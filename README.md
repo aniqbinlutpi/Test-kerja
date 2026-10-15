@@ -34,7 +34,7 @@
 - Client component will download all its javascript code straight into user's browser.
 - any user can just press F12 or open Inspect Element/Console (in network tabs) and easily see your secret keys (like Stripe keys, OpenAI API key or database password).
 - if hackers find these secrets, they can easily steal user data or drop/delete your whole database.
-That's why anything secret and database queries must always stay on server side / backend only.
+that why anything secret and database queries must always stay on server side / backend only.
 
 ### Question 2: Database Design
 
