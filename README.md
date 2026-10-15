@@ -38,46 +38,44 @@ That's why anything secret and database queries must always stay on server side 
 
 ### Question 2: Database Design
 
+<img width="1330" height="154" alt="image" src="https://github.com/user-attachments/assets/00189e7e-60df-4ad1-8fad-f070152013a4" />
+
 #### 1. SQL Schema (PostgreSQL)
 
 ```sql
--- 1. Customers Table
+-- Customers table
 CREATE TABLE customers (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. Invoices Table
+-- Invoices table (one customer can have many invoices)
 CREATE TABLE invoices (
     id SERIAL PRIMARY KEY,
-    customer_id INTEGER NOT NULL,
+    customer_id INT NOT NULL,
     amount NUMERIC(10, 2) NOT NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    -- Foreign key constraint with ON DELETE RESTRICT
-    CONSTRAINT fk_customer
-        FOREIGN KEY (customer_id)
-        REFERENCES customers(id)
+    status VARCHAR(50) DEFAULT 'PENDING',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- Foreign key linking to customers table
+    CONSTRAINT fk_customer 
+        FOREIGN KEY (customer_id) 
+        REFERENCES customers(id) 
         ON DELETE RESTRICT
 );
-
--- Index for fast lookup when querying invoices by customer
-CREATE INDEX idx_invoices_customer_id ON invoices(customer_id);
 ```
+<img width="1356" height="104" alt="image" src="https://github.com/user-attachments/assets/4a8acda5-042d-49f4-8b7f-2d9971a97121" />
 
-#### 2. What should happen to invoices when a customer is deleted? (`ON DELETE RESTRICT` vs `ON DELETE CASCADE`)
-
-* **Decision:** Always use **`ON DELETE RESTRICT`** for financial records.
-* **Why?**
-  > **ELI5:**
-  > If a customer moves to another city, a grocery store owner cannot rip out and burn the old receipt book showing what that customer bought last year. The tax officer needs to see every dollar that came in!
-* **Technical Reason:** Invoices are legally binding audit and financial records. If you use `CASCADE`, accidentally deleting a customer will silently erase all historical revenue and invoices associated with them, breaking bookkeeping balances and violating financial audit regulations.
-* **Best Practice:** With `RESTRICT`, the database prevents the deletion: *"You cannot delete this customer because existing invoice history depends on it."* If an account must be closed, perform a **Soft Delete** instead (e.g., setting `deleted_at = NOW()` or `is_active = FALSE`).
+- i will use ON DELETE RESTRICT, never CASCADE for financial records.
+- invoices are money records and audit trails. if we use CASCADE deleting a customer will accidentally delete all their past invoices and payment history.
+- if invoices get deleted, company will have accounting and tax audit issues because we lose the proof.
+- with RESTRICT, the database will block anyone from deleting the customer if they still have invoice history.
+- if we really need to delete or disable the customer, it's better to use soft delete 
+- example: set is_active = false or deleted_at = now()) so the invoice history stays safe.
 
 ---
 
