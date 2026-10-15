@@ -36,6 +36,8 @@
 - if hackers find these secrets, they can easily steal user data or drop/delete your whole database.
 that why anything secret and database queries must always stay on server side / backend only.
 
+---
+
 ### Question 2: Database Design
 
 <img width="1330" height="154" alt="image" src="https://github.com/user-attachments/assets/00189e7e-60df-4ad1-8fad-f070152013a4" />
@@ -79,32 +81,30 @@ CREATE TABLE invoices (
 ---
 
 ### Question 3: Payment Webhooks
+<img width="1948" height="296" alt="image" src="https://github.com/user-attachments/assets/b0c6784b-0379-496f-b1eb-7106646f6503" />
 
-#### 1. Handling Duplicate Webhook Events (Idempotency)
+1. check status first before update
+- when webhook comes in, check the invoice status in database first.
+- if status is already PAID, just return 200 OK and exit early. 
+- no need to update db again and dont send duplicate email to cust
 
-> **ELI5:**
-> Imagine a mail carrier delivers the exact same parcel twice because they were worried you didn't receive it. Before accepting the second parcel, you check your receipt list: *"I already signed and received this package 5 minutes ago!"* and politely decline the duplicate.
+2. save event ID
+- stripe always sends a unique event_id.
+- we can save this ID into our database table with unique constraint.
+- if the same event ID hit our server again, our system knows it is a duplicate and simply ignores it.
 
-To ensure the invoice is updated only once and the customer receives only one email:
-1. **Check Status Before Updating (State Guard):**
-   * When the webhook arrives, check the current invoice status in the database.
-   * If the status is already marked as `PAID`, immediately return a `200 OK` response to the gateway and stop execution (skip updating and skip sending the email).
-2. **Event Idempotency Table:**
-   * Store the unique webhook event ID (e.g., `evt_123` from Stripe) in a `processed_webhook_events` table with a unique constraint.
-   * If an incoming event ID already exists in this table, safely discard it.
-3. **Database Transactions:**
-   * Wrap the status update and the event logging inside a database transaction (`BEGIN ... COMMIT`) to prevent race conditions if two webhooks hit at the exact same millisecond.
+3. use database transaction - prevent race condition
+- wrap the update and event logging inside a transaction (BEGIN ... COMMIT).
+- this prevents race condition if the gateway accidentally sends two requests at the exact same millisecond.
 
 #### 2. Verifying Request Authenticity (Preventing Imposters)
 
-> **ELI5:**
-> Like an official wax seal on an envelope with a royal stamp that only the real king has the signet ring to produce.
-
-* **Webhook Signature Verification:**
-  1. The payment gateway shares a secret key (known only to the gateway and your backend server, stored securely in `.env`).
-  2. With every webhook POST request, the gateway creates a cryptographic hash (HMAC-SHA256) of the raw request payload using that secret key, and sends it in the HTTP headers (e.g., `Stripe-Signature` or `X-Signature`).
-  3. Your server reads the raw body, generates the HMAC signature using your secret key, and compares the two signatures (`crypto.timingSafeEqual`).
-  4. If they match, the request genuinely came from the gateway. If they don't, it is an attacker pretending to be the gateway, and your server responds with `400 Bad Request` or `401 Unauthorized`.
+**Verify Webhook Signature**
+-payment gateway will give us a *Webhook Secret Key* which we save safely inside our backend *.env* file.
+- everytime gateway sends a webhook request, they include a signature in the header (like stripe-signature).
+- in our code, we use that secret key to verify the signature with the request body.
+- if the signature not matching or missing, it means someone is pretending or trying to fake a payment
+- so we immediately reject the request.
 
 ---
 
