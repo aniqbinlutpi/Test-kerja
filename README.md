@@ -110,7 +110,8 @@ CREATE TABLE invoices (
 
 ## Section B: Code Review
 
-### Original Code:
+<img width="2008" height="832" alt="image" src="https://github.com/user-attachments/assets/ed962aac-17ab-4f1a-a5a6-319ca815b343" />
+
 
 ```typescript
 // app/api/invoice/update/route.ts
@@ -136,102 +137,100 @@ export async function POST(req: Request) {
 
 ### Identified Issues:
 
-**1. SQL Injection Vulnerability (Security Problem)**
-- **What could go wrong:** Values `${newStatus}` and `${invoiceId}` are injected directly into the SQL string. Anyone can pass malicious SQL (like `' OR '1'='1` or `; DROP TABLE invoices; --`) and compromise, steal, or delete the entire database.
-- **How to fix:** Use parameterized queries / prepared statements (e.g. `$1, $2`) so the database engine treats input strictly as data, never as executable code.
+**1. SQL Injection (Security Problem)**
+- **What could go wrong:** Values `${newStatus}` and `${invoiceId}` are injected directly into the SQL string.
+-anyone can pass malicious SQL (like `' OR '1'='1` or `; DROP TABLE invoices; --`) and compromise, steal, or delete the entire database.
+- **How to fix:** use parameterized queries / prepared statements (e.g. `$1, $2`) so the database engine treats input strictly as data, never as executable code.
 
-**2. Illegal State Transitions (Logic & Business Problem)**
+**2. Illegal State Transitions (Logic & Business)**
 - **What could go wrong:** An invoice is a state machine, but this code blindly accepts any `newStatus`. For example, an invoice that is already `PAID` or `CANCELLED` could be illegally changed back to `DRAFT`.
-- **How to fix:** Validate allowed transitions in business logic (e.g., `DRAFT` can go to `PENDING`, `PENDING` can go to `PAID`, but `PAID` cannot go back to `DRAFT`).
+- **How to fix:** Validate allowed transitions in business logic
+  example
+  - `DRAFT` can go to `PENDING`, 
+  - `PENDING` can go to `PAID`, 
+  - *but `PAID` cannot go back to `DRAFT`*
 
-**3. Missing Authentication & Authorization (Architecture & Data Problem)**
-- **What could go wrong:** The code takes `userId` from the body but never checks if the caller is actually logged in, nor does it verify if that user owns the invoice. A normal user can call this API and mark any invoice as `PAID` for free!
-- **How to fix:** Get user identity from server session/token (never trust client body), check ownership in database (`WHERE id = $1 AND customer_id = $2`), and ensure only admins or payment webhooks can mark an invoice as `PAID`.
+**3. Missing Authentication & Authorization (Architecture & Data )**
+- **What could go wrong:** The code takes `userId` from the body but never checks if the caller is actually logged in, nor does it verify if that user owns the invoice.
+- normal user can call this API and mark any invoice as `PAID` for free and easily
+- **How to fix:** Get user identity from server session/token (never trust client body), check ownership in database (`WHERE id = $1 AND customer_id = $2`)
+- and ensure only admins or payment webhooks can mark an invoice as `PAID`.
 
 ---
 
-### Refactored & Fixed Route:
+#### Fixed Version of the Route:
 
 ```typescript
 // app/api/invoice/update/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getAuthUser } from "@/lib/auth"; // Your server-side session helper
+import { getAuthUser } from "@/lib/auth"; // verify session
 
-// 1. Strict input validation schema
-const updateInvoiceSchema = z.object({
-  invoiceId: z.coerce.number().int().positive({
-    message: "invoiceId must be a positive integer",
-  }),
-  newStatus: z.enum(["DRAFT", "PENDING", "PAID", "CANCELLED"], {
-    errorMap: () => ({ message: "Invalid invoice status" }),
-  }),
+// 1. Schema validation
+const updateSchema = z.object({
+  invoiceId: z.coerce.number().int().positive(),
+  newStatus: z.enum(["DRAFT", "PENDING", "PAID", "CANCELLED"]),
 });
+
+// 2. Business logic: State machine transitions
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  DRAFT: ["PENDING", "CANCELLED"],
+  PENDING: ["PAID", "CANCELLED"],
+  PAID: ["CANCELLED"], // once paid, cannot go back to draft
+  CANCELLED: [],       // final state
+};
 
 export async function POST(req: Request) {
   try {
-    // 2. Authentication: Verify caller's identity via server-side session
-    const currentUser = await getAuthUser(req);
-    if (!currentUser) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized. Please log in." },
-        { status: 401 }
-      );
+    // Check if user is logged in
+    const user = await getAuthUser(req);
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    // 3. Parse and validate body
-    const json = await req.json().catch(() => null);
-    const parsed = updateInvoiceSchema.safeParse(json);
-
+    const body = await req.json().catch(() => null);
+    const parsed = updateSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Validation failed",
-          details: parsed.error.flatten().fieldErrors,
-        },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: parsed.error.flatten().fieldErrors }, { status: 400 });
     }
 
     const { invoiceId, newStatus } = parsed.data;
 
-    // 4. Parameterized Query (Prevents SQL Injection) + Authorization check
-    // Ensures regular users can only update their own invoices
-    const result = await db.query(
-      `UPDATE invoices 
-       SET status = $1, updated_at = NOW() 
-       WHERE id = $2 AND customer_id = $3
-       RETURNING id, customer_id, amount, status, updated_at`,
-      [newStatus, invoiceId, currentUser.id]
+    // Fetch existing invoice to check ownership and state transition
+    const existing = await db.query(
+      `SELECT id, status, customer_id FROM invoices WHERE id = $1 AND customer_id = $2`,
+      [invoiceId, user.id]
     );
 
-    // 5. Handle invoice not found or unauthorized access
-    if (result.rowCount === 0) {
+    if (existing.rowCount === 0) {
+      return NextResponse.json({ success: false, error: "Invoice not found or forbidden" }, { status: 404 });
+    }
+
+    const currentStatus = existing.rows[0].status;
+
+    // Check illegal state transition
+    const allowed = ALLOWED_TRANSITIONS[currentStatus] || [];
+    if (!allowed.includes(newStatus)) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Invoice not found or you do not have permission to modify it.",
-        },
-        { status: 404 }
+        { success: false, error: `Cannot transition invoice from ${currentStatus} to ${newStatus}` },
+        { status: 400 }
       );
     }
 
-    // 6. Return sanitized, successful response
-    return NextResponse.json({
-      success: true,
-      data: result.rows[0],
-    });
+    // Parameterized query to prevent SQL Injection
+    const updated = await db.query(
+      `UPDATE invoices 
+       SET status = $1, updated_at = NOW() 
+       WHERE id = $2 
+       RETURNING *`,
+      [newStatus, invoiceId]
+    );
+
+    return NextResponse.json({ success: true, data: updated.rows[0] });
 
   } catch (error) {
-    // 7. Safe error handling: Log internally, don't leak internals to client
-    console.error("[API_INVOICE_UPDATE_ERROR]:", error);
-
-    return NextResponse.json(
-      { success: false, error: "Internal server error" },
-      { status: 500 }
-    );
+    console.error("Invoice update error:", error);
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }
-```
