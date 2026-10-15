@@ -112,27 +112,6 @@ CREATE TABLE invoices (
 
 <img width="2008" height="832" alt="image" src="https://github.com/user-attachments/assets/ed962aac-17ab-4f1a-a5a6-319ca815b343" />
 
-
-```typescript
-// app/api/invoice/update/route.ts
-import { NextResponse } from "next/server";
-import { db } from "@/lib/db"; // hypothetical db client
-
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const { invoiceId, newStatus, userId } = body;
-    // Update invoice
-    const updatedInvoice = await db.query(
-      `UPDATE invoices SET status = '${newStatus}' WHERE id = ${invoiceId}`
-    );
-    return NextResponse.json({ success: true, data: updatedInvoice });
-  } catch (error) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-  }
-}
-```
-
 ---
 
 ### Identified Issues:
