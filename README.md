@@ -117,12 +117,15 @@ CREATE TABLE invoices (
 ### Identified Issues:
 
 **1. SQL Injection (Security Problem)**
-- **What could go wrong:** Values `${newStatus}` and `${invoiceId}` are injected directly into the SQL string. Anyone can pass malicious SQL (like `' OR '1'='1` or `; DROP TABLE invoices; --`) and steal, compromise, or delete the entire database.
+- **What could go wrong:** Values `${newStatus}` and `${invoiceId}` are injected directly into the SQL string. 
+- anyone can pass malicious SQL and steal or delete the entire database.
 - **How to fix:** Use parameterized queries / prepared statements (e.g. `$1, $2`) so the database engine treats input strictly as data, never as executable code.
 - - return `error: error.message` directly in 500 response leaks internal database details to users. we should log the error on the server (`console.error`) and return a generic message like `"Internal server error"`.
 
 **2. No Input Validation & Illegal State Transitions (Data & Logic Problem)**
-- **What could go wrong:** The code blindly accepts any string for `newStatus` (even random junk like `"SUPERMAN"` or empty strings) without checking if `invoiceId` is a valid number. Furthermore, an invoice is a state machine, but this code allows illegal status changes — for example, an invoice that is already `PAID` or `CANCELLED` could be changed back to `DRAFT`.
+- **What could go wrong:** The code blindly accepts any string for `newStatus` (even random junk like `"SUPERMAN"` or empty strings) without checking if `invoiceId` is a valid number.
+- thenn, an invoice is a **state machine**, 
+*( but this code allows illegal status changes — for example, an invoice that is already `PAID` or `CANCELLED` could be changed back to `DRAFT` )*
 - **How to fix:** 
   - Validate inputs using **Zod** to allow only valid statuses (`['DRAFT', 'PENDING', 'PAID', 'CANCELLED']`) and ensure `invoiceId` is a number.
   - Enforce business logic rules for state transitions:
@@ -131,7 +134,8 @@ CREATE TABLE invoices (
     - *but `PAID` cannot go back to `DRAFT`*
 
 **3. Missing Authentication & Authorization (Security & Access Control)**
-- **What could go wrong:** The code takes `userId` from the request body but never verifies if the user is actually logged in, nor does it check if that user owns the invoice. Any normal user can call this API and mark someone else's invoice as `PAID` for free.
+- **What could go wrong:** The code takes `userId` from the request body but never verifies if the user is actually logged in, nor does it check if that user owns the invoice.
+- any normal user can call this API and mark someone else's invoice as `PAID` for free.
 - **How to fix:** 
   - Get user identity from a secure server-side session/token (never trust client body).
   - Check invoice ownership in the database (`WHERE id = $1 AND customer_id = $2`).
