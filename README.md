@@ -97,7 +97,7 @@ CREATE TABLE invoices (
 - wrap the update and event logging inside a transaction (BEGIN ... COMMIT).
 - this prevents race condition if the gateway accidentally sends two requests at the exact same millisecond.
 
-#### 2. Verifying Request Authenticity (Preventing Imposters)
+<img width="1948" height="72" alt="image" src="https://github.com/user-attachments/assets/16b7c33e-feab-498b-b664-639ca85f4f06" />
 
 **Verify Webhook Signature**
 -payment gateway will give us a *Webhook Secret Key* which we save safely inside our backend *.env* file.
