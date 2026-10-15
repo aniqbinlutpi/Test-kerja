@@ -6,8 +6,6 @@
 
 ### Question 1: Next.js Architecture
 
-#### 1. Difference between Server Component and Client Component (`'use client'`)
-
 **Server Component**
 - runs only on the server side. it's never send javascript to the browser (users cant know), like logical/flow of the system.
 - programmer fetching data, query db, logic, cant be exposed.
@@ -16,18 +14,18 @@
 - it's javascript is downloaded and executed inside the user's browser.
 - andles UI interactions, user clicks, and client-side data (useState/useQuery)
 
-#### 2. When would you use each one?
+<img width="1352" height="238" alt="image" src="https://github.com/user-attachments/assets/e268a129-8bac-47be-a293-d55736095569" />
 
-**Use Server Components for:**
-  * Fetching data directly from databases or backend APIs.
-  * Static content, layouts, text, headers, and footers.
-  * Keeping heavy npm dependencies on the server to keep user download speeds fast.
-  * Better SEO (search engines read the pre-rendered HTML easily).
-* **Use Client Components for:**
-  * User interaction: event listeners like `onClick`, `onChange`, `onSubmit`.
-  * State management and lifecycle hooks: `useState`, `useReducer`, `useEffect`.
-  * Browser-only APIs: `window`, `localStorage`, geolocation, or canvas.
-  * Custom UI widgets that need live user interaction (e.g., modals, dropdowns, carousels).
+**Use Server Components**
+- fetching data directly from database or backend API (no need create extra API routes).
+- static pages or layout that dont need user interaction (header, footer,text).
+- heavy packages/libraries, so user browser doesnt have to download big files.
+
+**Use Client Components**
+- any user interaction and clicks (buttons, form submit, typing inputs).
+- managing UI state and live data (useState / fetching using TanStack Query).
+- browser-only features (accessing localStorage, window screen size, cookies).
+- popup modals, dropdown menu or anything that users open and close on the screen.
 
 #### 3. Why should you NEVER import database queries or secret API keys into a Client Component?
 
